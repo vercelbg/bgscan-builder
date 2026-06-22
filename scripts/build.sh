@@ -67,23 +67,54 @@ build_go() {
     ./cmd/builder
 }
 
+build_android() {
+  local arch="$1"
+  local triple="$2"
+  local name="$3"
+
+  export GOOS=android
+  export GOARCH="$arch"
+  export CGO_ENABLED=1
+
+  case "$arch" in
+    arm64)
+      export CC=aarch64-linux-android21-clang
+      ;;
+    arm)
+      export CC=armv7a-linux-androideabi21-clang
+      ;;
+    386)
+      export CC=i686-linux-android21-clang
+      ;;
+    amd64)
+      export CC=x86_64-linux-android21-clang
+      ;;
+  esac
+
+  log "BUILD => android/$arch -> $name"
+
+  go build -trimpath -ldflags="-s -w" \
+    -o "$DIST_DIR/bgscan-$name" \
+    ./cmd/builder
+}
+
 # ==============================================================================
 # ANDROID NDK SETUP (CI ONLY)
 # ==============================================================================
 setup_android_ndk() {
+  set -e
+
   API=21
   NDK_VERSION="r27d"
   NDK_DIR="$ROOT_DIR/android-ndk-$NDK_VERSION"
 
-  log "ANDROID: Preparing NDK environment"
+  log "ANDROID: setting up NDK"
 
   sudo apt-get update -y >/dev/null
-  sudo apt-get install -y git wget unzip curl build-essential >/dev/null
+  sudo apt-get install -y wget unzip curl build-essential >/dev/null
 
   if [ ! -d "$NDK_DIR" ]; then
-    log "Downloading Android NDK $NDK_VERSION"
-
-    wget --progress=bar:force:noscroll \
+    wget -q \
       "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" \
       -O "$ROOT_DIR/ndk.zip"
 
@@ -91,8 +122,10 @@ setup_android_ndk() {
     rm -f "$ROOT_DIR/ndk.zip"
   fi
 
-  export TOOLCHAIN_BIN="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
-  export PATH="$TOOLCHAIN_BIN:$PATH"
+  export NDK="$NDK_DIR"
+  export TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+
+  export PATH="$TOOLCHAIN/bin:$PATH"
 }
 
 # ==============================================================================
@@ -121,10 +154,10 @@ android)
 
   setup_android_ndk
 
-  build_go android arm64 android-arm64-v8a 1
-  build_go android arm android-armeabi-v7a 1
-  build_go android amd64 android-x86_64 1
-  build_go android 386 android-x86 1
+build_android arm64 arm64 bgscan-android-arm64-v8a
+build_android arm arm bgscan-android-armeabi-v7a
+build_android amd64 amd64 bgscan-android-x86_64
+build_android 386 386 bgscan-android-x86
   ;;
 
 all)
