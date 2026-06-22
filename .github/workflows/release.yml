@@ -97,7 +97,7 @@ jobs:
           merge-multiple: true
 
       - name: Prepare release script
-        run: chmod +x ./scripts/release.sh
+        run: ls dist/ && chmod +x ./scripts/release.sh
 
       - name: Generate release metadata
         run: ./scripts/release.sh "${{ needs.context.outputs.tag }}"
