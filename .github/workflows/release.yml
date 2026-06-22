@@ -100,7 +100,7 @@ jobs:
         run: chmod +x ./scripts/release.sh
 
       - name: Generate release metadata
-        run: ./scripts/release.sh"${{ needs.context.outputs.tag }}"
+        run: ./scripts/release.sh "${{ needs.context.outputs.tag }}"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
