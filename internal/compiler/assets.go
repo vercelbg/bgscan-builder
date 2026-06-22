@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -8,82 +9,92 @@ import (
 	"strings"
 )
 
-// PrepareProjectFiles handles staging profiles, lists, and documentation
-// components directly into the build workspace root.
+// PrepareProjectFiles copies project configuration and metadata into a build workspace.
 func PrepareProjectFiles(srcProjectDir, destRootDir string) error {
-	srcSettings := filepath.Join(srcProjectDir, "settings")
-	destSettings := filepath.Join(destRootDir, "settings")
-
-	if err := copyAndStripDefaultExtension(srcSettings, destSettings); err != nil {
-		return fmt.Errorf("failed to copy main settings: %w", err)
+	if err := copyDefaultFiles(
+		filepath.Join(srcProjectDir, "settings"),
+		filepath.Join(destRootDir, "settings"),
+		false,
+	); err != nil {
+		return fmt.Errorf("copy settings: %w", err)
 	}
 
-	srcIPs := filepath.Join(srcProjectDir, "ips")
-	destIPs := filepath.Join(destRootDir, "ips")
-
-	if _, err := os.Stat(srcIPs); err == nil {
-		if err := copyAndStripDefaultExtension(srcIPs, destIPs); err != nil {
-			return fmt.Errorf("failed to copy ips settings: %w", err)
-		}
+	if err := copyDefaultFiles(
+		filepath.Join(srcProjectDir, "ips"),
+		filepath.Join(destRootDir, "ips"),
+		false,
+	); err != nil {
+		return fmt.Errorf("copy ips: %w", err)
 	}
 
-	metaFiles := []string{"LICENSE", "README.md"}
-	for _, filename := range metaFiles {
-		srcMetaPath := filepath.Join(srcProjectDir, filename)
+	return copyMetadata(srcProjectDir, destRootDir)
+}
 
-		if _, err := os.Stat(srcMetaPath); os.IsNotExist(err) {
-			continue
-		}
+// PrepareDevProjectFiles creates missing files from *.default templates.
+func PrepareDevProjectFiles(projectDir string) error {
+	if err := copyDefaultFiles(
+		filepath.Join(projectDir, "settings"),
+		filepath.Join(projectDir, "settings"),
+		true,
+	); err != nil {
+		return fmt.Errorf("copy settings: %w", err)
+	}
 
-		destMetaPath := filepath.Join(destRootDir, filename)
-		if err := copyFileRaw(srcMetaPath, destMetaPath); err != nil {
-			return fmt.Errorf("failed to copy metadata asset %s: %w", filename, err)
-		}
+	if err := copyDefaultFiles(
+		filepath.Join(projectDir, "ips"),
+		filepath.Join(projectDir, "ips"),
+		true,
+	); err != nil {
+		return fmt.Errorf("copy ips: %w", err)
 	}
 
 	return nil
 }
 
-// CopyAssets copies everything recursively inside the cloned assets directory
-// directly into the destination directory structure.
+// CopyAssets copies the assets directory into the destination workspace.
 func CopyAssets(srcProjectDir, destRootDir string) error {
 	srcAssets := filepath.Join(srcProjectDir, "assets")
 	destAssets := filepath.Join(destRootDir, "assets")
 
-	if _, err := os.Stat(srcAssets); os.IsNotExist(err) {
+	if _, err := os.Stat(srcAssets); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 
-	return filepath.Walk(srcAssets, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	return filepath.Walk(
+		srcAssets,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
 
-		relPath, err := filepath.Rel(srcAssets, path)
-		if err != nil {
-			return err
-		}
+			rel, err := filepath.Rel(srcAssets, path)
+			if err != nil {
+				return err
+			}
 
-		targetPath := filepath.Join(destAssets, relPath)
+			dst := filepath.Join(destAssets, rel)
 
-		if info.IsDir() {
-			return os.MkdirAll(targetPath, info.Mode())
-		}
+			if info.IsDir() {
+				return os.MkdirAll(dst, info.Mode())
+			}
 
-		return copyFileRaw(path, targetPath)
-	})
+			return copyFile(path, dst)
+		},
+	)
 }
 
-func copyAndStripDefaultExtension(srcDir, destDir string) error {
+// copyDefaultFiles copies files from srcDir while removing the .default suffix.
+// Existing files are preserved when skipExisting is true.
+func copyDefaultFiles(srcDir, destDir string, skipExisting bool) error {
 	entries, err := os.ReadDir(srcDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
 		return err
 	}
 
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return err
 	}
 
@@ -92,30 +103,67 @@ func copyAndStripDefaultExtension(srcDir, destDir string) error {
 			continue
 		}
 
-		srcFile := filepath.Join(srcDir, entry.Name())
-		cleanName := strings.TrimSuffix(entry.Name(), ".default")
-		destFile := filepath.Join(destDir, cleanName)
+		src := filepath.Join(srcDir, entry.Name())
+		dst := filepath.Join(
+			destDir,
+			strings.TrimSuffix(entry.Name(), ".default"),
+		)
 
-		if err := copyFileRaw(srcFile, destFile); err != nil {
+		if skipExisting {
+			if _, err := os.Stat(dst); err == nil {
+				continue
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+
+		if err := copyFile(src, dst); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-func copyFileRaw(src, dest string) error {
-	sourceFile, err := os.Open(src)
+// copyMetadata copies common project metadata files.
+func copyMetadata(srcDir, destDir string) error {
+	for _, name := range []string{
+		"LICENSE",
+		"README.md",
+	} {
+		src := filepath.Join(srcDir, name)
+
+		if _, err := os.Stat(src); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+
+		if err := copyFile(src, filepath.Join(destDir, name)); err != nil {
+			return fmt.Errorf("copy %s: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a file without modification.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer in.Close()
 
-	destFile, err := os.Create(dest)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer out.Close()
 
-	_, err = io.Copy(destFile, sourceFile)
+	_, err = io.Copy(out, in)
 	return err
 }
+
