@@ -141,7 +141,14 @@ linux)
   build_go linux arm64 linux-arm64
   build_go linux arm linux-arm32-v7a
   ;;
+  
+macos)
+  log "TARGET: MACOS"
 
+  build_go darwin amd64 macos-64
+  build_go darwin arm64 macos-arm64
+  ;;
+  
 windows)
   log "TARGET: WINDOWS"
 
