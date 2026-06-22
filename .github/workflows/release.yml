@@ -54,6 +54,7 @@ jobs:
       matrix:
         target:
           - linux
+          - macos
           - windows
           - android
 
