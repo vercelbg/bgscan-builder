@@ -71,7 +71,7 @@ build_go() {
 build_android() {
   local arch="$1"
   local triple="$2"
-  local name="bgscan-builder$3"
+  local name="bgscan-builder-$3"
 
   export GOOS=android
   export GOARCH="$arch"
