@@ -16,9 +16,10 @@
 #
 # OUTPUT:
 #   dist/
-#     bgscan-linux-*
-#     bgscan-windows-*
-#     bgscan-android-*
+#     bgscan-builder-linux-*
+#     bgscan-builder-windows-*
+#     bgscan-builder-android-*
+#     bgscan-builder-macos-*
 #
 # REQUIREMENTS:
 #   - Go toolchain installed
@@ -53,24 +54,24 @@ mkdir -p "$DIST_DIR"
 build_go() {
   local goos="$1"
   local goarch="$2"
-  local name="$3"
+  local name="bgscan-builder-$3"
   local cgo="${4:-0}"
 
-  log "BUILD => $goos/$goarch -> bgscan-$name"
+  log "BUILD => $goos/$goarch -> $name"
 
   export GOOS="$goos"
   export GOARCH="$goarch"
   export CGO_ENABLED="$cgo"
 
   go build -trimpath -ldflags="-s -w" \
-    -o "$DIST_DIR/bgscan-$name" \
+    -o "$DIST_DIR/$name" \
     ./cmd/builder
 }
 
 build_android() {
   local arch="$1"
   local triple="$2"
-  local name="$3"
+  local name="bgscan-builder$3"
 
   export GOOS=android
   export GOARCH="$arch"
@@ -94,7 +95,7 @@ build_android() {
   log "BUILD => android/$arch -> $name"
 
   go build -trimpath -ldflags="-s -w" \
-    -o "$DIST_DIR/bgscan-$name" \
+    -o "$DIST_DIR/$name" \
     ./cmd/builder
 }
 
@@ -161,16 +162,17 @@ android)
 
   setup_android_ndk
 
-build_android arm64 arm64 bgscan-android-arm64-v8a
-build_android arm arm bgscan-android-armeabi-v7a
-build_android amd64 amd64 bgscan-android-x86_64
-build_android 386 386 bgscan-android-x86
+build_android arm64 arm64 android-arm64-v8a
+build_android arm arm android-armeabi-v7a
+build_android amd64 amd64 android-x86_64
+build_android 386 386 android-x86
   ;;
 
 all)
   log "TARGET: ALL"
 
   bash "$0" linux
+  bash "$0" macos
   bash "$0" windows
   bash "$0" android
   ;;
