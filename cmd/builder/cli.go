@@ -9,11 +9,15 @@ import (
 	"bgscan-builder/internal/platform"
 )
 
+const MODE_DEV = "setup-dev"
+const MODE_RELEASE = "release"
+
 // Config aggregates the validated configuration states required to run
 // the multi-architecture builder routines.
 type Config struct {
 	Mode        string
 	Platforms   []platform.Info
+	ProjectDir  string
 	DestDir     string
 	NDKDir      string
 	DepVersion  string
@@ -28,9 +32,9 @@ func ParseCLI() (*Config, error) {
 	}
 
 	switch os.Args[1] {
-	case "setup-dev":
+	case MODE_DEV:
 		return parseSetupDev()
-	case "release":
+	case MODE_RELEASE:
 		return parseRelease()
 	default:
 		return nil, fmt.Errorf("unknown subcommand %q", os.Args[1])
@@ -39,10 +43,27 @@ func ParseCLI() (*Config, error) {
 
 // parseSetupDev sets up configuration parameters for the local development profile.
 func parseSetupDev() (*Config, error) {
+	fs := flag.NewFlagSet(MODE_DEV, flag.ExitOnError)
+
+	projectDir := fs.String(
+		"project-dir",
+		"",
+		"Path to the bgscan project",
+	)
+
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return nil, err
+	}
+
+	if *projectDir == "" {
+		return nil, fmt.Errorf("project-dir is required")
+	}
+
 	cfg := &Config{
-		Mode:        "setup-dev",
+		Mode:        MODE_DEV,
 		Platforms:   []platform.Info{platform.Detect()},
-		DestDir:     ".",
+		ProjectDir:  *projectDir,
+		DestDir:     filepath.Join(*projectDir, "dist"),
 		DepVersion:  "v1.0",
 		XrayVersion: "v26.3.27",
 	}
@@ -53,7 +74,7 @@ func parseSetupDev() (*Config, error) {
 
 // parseRelease handles command flag structures for generating formal multi-platform software distribution units.
 func parseRelease() (*Config, error) {
-	fs := flag.NewFlagSet("release", flag.ExitOnError)
+	fs := flag.NewFlagSet(MODE_RELEASE, flag.ExitOnError)
 
 	targetOS := fs.String(
 		"os",
@@ -69,6 +90,11 @@ func parseRelease() (*Config, error) {
 		"dest",
 		"./dist",
 		"Release output directory",
+	)
+	projectDir := fs.String(
+		"project-dir",
+		"",
+		"Path to the bgscan project",
 	)
 	ndkDir := fs.String(
 		"ndk-dir",
@@ -104,6 +130,7 @@ func parseRelease() (*Config, error) {
 		NDKDir:      *ndkDir,
 		DepVersion:  *depVersion,
 		XrayVersion: *xrayVersion,
+		ProjectDir:  *projectDir,
 	}
 
 	if len(cfg.Platforms) == 0 {
@@ -173,4 +200,3 @@ func resolvePaths(cfg *Config) {
 		}
 	}
 }
-
